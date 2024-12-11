@@ -1,0 +1,103 @@
+import os
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
+import face_recognition
+
+# Replace with your email and password
+EMAIL_USER = 'yourmail'
+EMAIL_PASS = 'mailpasskey'
+
+# Replace with the recipient's email
+RECIPIENT_EMAIL = 'recipentmail'
+
+# Load face encoding from a specific image
+def load_face_encoding(image_path):
+    try:
+        image = face_recognition.load_image_file(image_path)
+        image_encodings = face_recognition.face_encodings(image)
+
+        if len(image_encodings) > 0:
+            print(f"Loaded encoding for: {image_path}")
+            return image_encodings[0]  # Return the first face encoding
+        else:
+            print(f"No faces found in {image_path}")
+            return None
+    except Exception as e:
+        print(f"Error loading {image_path}: {e}")
+        return None
+
+# Compare face from the source image with the target image
+def compare_faces_and_send_email(source_encoding, target_folder):
+    for root, _, files in os.walk(target_folder):
+        for image_file in files:
+            if not image_file.lower().endswith(('.jpg', '.jpeg', '.png')):
+                continue
+
+            target_image_path = os.path.join(root, image_file)
+            try:
+                target_image = face_recognition.load_image_file(target_image_path)
+                target_encodings = face_recognition.face_encodings(target_image)
+
+                if len(target_encodings) > 0:
+                    print(f"Found {len(target_encodings)} faces in {target_image_path}")
+                    result = face_recognition.compare_faces([source_encoding], target_encodings[0], tolerance=0.6)
+
+                    if result[0]:  # A match is found
+                        print(f"Match found in {target_image_path}")
+                        send_email(target_image_path)
+                    else:
+                        print("No match found.")
+                else:
+                    print(f"No faces found in {target_image_path}")
+
+            except Exception as e:
+                print(f"Error processing {target_image_path}: {e}")
+
+# Send email with the matched image to the recipient
+def send_email(image_path):
+    try:
+        # Prepare the email message
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_USER
+        msg['To'] = RECIPIENT_EMAIL
+        msg['Subject'] = "Matched Face Detected"
+
+        body = f"Dear User,\n\nWe have detected a matching face in the following image:\n{image_path}\n\nBest regards,\nFace Recognition System"
+        msg.attach(MIMEText(body, 'plain'))
+
+        # Attach the image to the email
+        with open(image_path, 'rb') as img_file:
+            img = MIMEImage(img_file.read())
+            img.add_header('Content-Disposition', f'attachment; filename={os.path.basename(image_path)}')
+            msg.attach(img)
+
+        # Set up the server and send the email
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(EMAIL_USER, EMAIL_PASS)
+        server.sendmail(EMAIL_USER, RECIPIENT_EMAIL, msg.as_string())
+        server.quit()
+
+        print(f"Email sent to {RECIPIENT_EMAIL} with image: {image_path}")
+
+    except Exception as e:
+        print(f"Failed to send email to {RECIPIENT_EMAIL}: {e}")
+
+# Main function to execute face recognition and send email
+def main():
+    # Assuming 'source_image.jpg' is in the same folder as the notebook
+    source_image_path = r"source image path"  # Adjust if the image is in a subfolder or different directory
+    target_folder = r"Targetfolderpath"  # Replace with the actual target folder path
+
+    # Load the source image encoding
+    source_encoding = load_face_encoding(source_image_path)
+
+    # If the source encoding is found, proceed to compare with the target folder images
+    if source_encoding is not None:
+        compare_faces_and_send_email(source_encoding, target_folder)
+
+# Run the main function
+if __name__ == "__main__":
+    main()
